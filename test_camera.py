@@ -23,5 +23,22 @@ def test_indices():
         cap.release()
         print(f"Index {index} released.\n")
 
+def find_iphone():
+    # We check 0-5 to find the iPhone
+    for i in range(5):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            # Get the name/backend info
+            print(f"Index {i} is available.")
+            ret, frame = cap.read()
+            if ret:
+                # iPhone frames are usually vertical (higher height than width) 
+                # or have a specific high resolution.
+                h, w, _ = frame.shape
+                print(f"  Resolution: {w}x{h}")
+            cap.release()
+
+
 if __name__ == "__main__":
     test_indices()
+    find_iphone()
