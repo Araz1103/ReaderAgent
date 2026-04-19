@@ -1,6 +1,8 @@
 import cv2
 import os
 import time
+import subprocess
+import re
 from PIL import Image
 from mlx_vlm import load, generate
 
@@ -59,11 +61,11 @@ def run_experiment():
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "I am providing 3 images of the same book page from different angles to ensure clarity."},
-                {"type": "image"}, # burst_1
-                {"type": "image"}, # burst_2
-                {"type": "image"}, # burst_3
-                {"type": "text", "text": f"Find the word '{target_word}' on this page and explain its meaning contextually. Be concise."}
+                {"type": "text", "text": "I am providing 3 images of the same book page. Use them to ensure you see all the text clearly."},
+                {"type": "image"}, 
+                {"type": "image"}, 
+                {"type": "image"}, 
+                {"type": "text", "text": f"Find the word '{target_word}' on the page and explain its meaning contextually. Be concise."}
             ]
         }
     ]
@@ -82,16 +84,16 @@ def run_experiment():
             model, 
             processor, 
             prompt, 
-            pil_images,  # Passing the list of 3 images
-            verbose=True,
+            pil_images, # Passing the list of 3 images
+            verbose=True, # Keeps the "Thinking" on terminal
             temp=0.1,
-            max_tokens=600
+            max_tokens=800
         )
         
         full_output = result.text
 
         # 2. UPDATED PARSING (Splits at the <channel|> or </|thought|> token)
-        # Based on your previous output, Gemma 4 uses '<channel|>' as the final separator.
+        # Gemma 4 uses '<channel|>' as the final separator.
         if "<channel|>" in full_output:
             explanation = full_output.split("<channel|>")[-1].strip()
         elif "</|thought|>" in full_output:
@@ -105,12 +107,13 @@ def run_experiment():
 
         print(f"\n📢 AI EXPLANATION: {explanation}")
         
-        # 3. CLEAN AUDIO OUTPUT
-        # We only 'say' the explanation part
-        if len(explanation) > 10:
-            os.system(f"say \"{explanation}\"")
-        else:
-            print("⚠️ Explanation too short, something went wrong with the parse.")
+        # --- CLEAN SPEECH FIX ---
+        # Remove markdown stars (**) and quotes for a clean 'say' command
+        clean_speech = re.sub(r'\*', '', explanation) 
+        clean_speech = clean_speech.replace('"', '')
+
+        # Use subprocess for robust shell handling
+        subprocess.run(["say", clean_speech])
             
     except Exception as e:
         print(f"❌ Error during reasoning: {e}")
