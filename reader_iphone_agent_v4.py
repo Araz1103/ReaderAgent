@@ -1,3 +1,4 @@
+import copy
 import cv2
 import os
 import time
@@ -17,9 +18,11 @@ CHAT_HISTORY = []   # Stores the multi-turn conversation
 print("🚀 LOADING ALFRED'S BRAIN (Gemma 4 E4B)...")
 model, processor = load(MODEL_ID)
 
-# --- 2. SYSTEM PROMPT & FEW-SHOT EXAMPLES ---
+# --- 2. SYSTEM PROMPTS & FEW-SHOT EXAMPLES ---
 # This is the most critical part for a 4B model to act as an agent.
-SYSTEM_PROMPT = """You are Alfred, a Contextual Reading Assistant. 
+
+# DECISION PROMPT with strict rules and examples to choose between [CAMERA] and [CONTINUE]
+DECISION_PROMPT = """You are Alfred, a Contextual Reading Assistant. Your ONLY job is to decide if we need to call the [CAMERA] or [CONTINUE].
 
 The user is reading a book, and they will ask you to explain words or concepts they encounter. 
 You have to answer their queries based on the book they are reading. For that, you have a CAMERA tool.
@@ -30,28 +33,38 @@ TOOL DESCRIPTION:
 - CAMERA: Use this if the user asks about a new word, a new page, or if you cannot see the text required to answer.
 
 DECISION RULES:
-1. If you need to see the book, your response MUST start with: [CAMERA]
-2. If you can answer using the images already in your memory or answer from previous turns, start with: [CONTINUE]
-3. Always prefer to explain words and concepts user asks about contextually, from the book, using the images you have from the CAMERA tool.
+1. If you need to see the book, and if the user asks about a NEW word/page not in the history and images, your response MUST start with: [CAMERA]
+2. If the user asks a follow-up about the CURRENT context and you can answer using the images already in your memory or answer from previous turns, start with: [CONTINUE]
 
 EXAMPLES:
 ---------------------------------------
 User: What does 'ephemeral' mean here?
 Alfred: [CAMERA] I need to see the page first. Please align your book.
-Alfred: (After seeing images provided from CAMERA tool) It means lasting a short time.
 User: Is it a metaphor?
-Alfred: [CONTINUE] Yes, looking at the previous context of the 'sunset', it is a metaphor.
+Alfred: [CONTINUE] I can answer this from looking at the previous context.
 ---------------------------------------
 ---------------------------------------
 User: Can you explain what is implied when it is said Tom is devious?
 Alfred: [CAMERA] I need to see what you are reading. Please align your book.
-Alfred: (After seeing images provided from CAMERA tool) It means Tom is a cunning or deceitful character.
 User: What are some synonyms of devious?
-Alfred: [CONTINUE] Some synonyms of devious are: sly, cunning, deceitful, underhanded, and crafty.
+Alfred: [CONTINUE] I can answer the synonyms of devious from the previous context.
 User: What does the author mean by "the world is a stage" in the last paragraph?
 Alfred: [CAMERA] I need to see the last paragraph. Please take a picture of what you are reading.
-Alfred: (After seeing images provided from CAMERA tool) The author is using a metaphor to compare the world to a stage, suggesting that life is like a play where people have roles to perform.
 ---------------------------------------
+"""
+
+# ANSWERING PROMPT (used in the reasoning phase, after decision and tool use)
+ANSWERING_PROMPT = """You are Alfred, a Contextual Reading Assistant. 
+
+The user is reading a book, and they will ask you to explain words or concepts they encounter. 
+You have to answer their queries based on the book they are reading.
+
+Always prefer to explain words and concepts user asks about contextually, from the book, using the images you have.
+
+RULES:
+1. Use the images to find the exact sentences for context.
+2. Be concise and helpful. Use your knowledge of language and literature to explain, but always try to ground your answers in the text you see in the images.
+3. Do not mention technical tags or tools. Provide the explanation directly without narrating your internal process.
 """
 
 # --- 3. THE VISION TOOL ---
@@ -157,17 +170,29 @@ def alfred_brain(user_query, cap):
     STATUS = "DECIDING"
 
     # We build the 'Context' for Alfred to make his choice
-    # We put the System Prompt in the first turn to set the 'Rules'
+    # We put the DECISION Prompt in the first turn to set the 'Rules' for deciding between CAMERA and CONTINUE.
     # We create the decision list. If History is empty, we merge Prompt + Query.
     if not CHAT_HISTORY:
         decision_messages = [
-            {"role": "user", "content": [{"type": "text", "text": f"{SYSTEM_PROMPT}\n\nFIRST REQUEST: {user_query}"}]}
+            {"role": "user", "content": [{"type": "text", "text": f"{DECISION_PROMPT}\n\nUSER REQUEST: {user_query}"}]}
         ]
     else:
         # History exists, so we keep System Prompt at top and append history
-        decision_messages = [{"role": "user", "content": [{"type": "text", "text": SYSTEM_PROMPT}]}]
-        decision_messages.extend(CHAT_HISTORY)
-        decision_messages.append({"role": "user", "content": [{"type": "text", "text": f"FOLLOW-UP REQUEST: {user_query}"}]})
+
+        # 1. Create a deep copy of CHAT_HISTORY so we don't modify the original
+        decision_messages = copy.deepcopy(CHAT_HISTORY)
+
+        # 2. Inject the DECISION_PROMPT into the VERY FIRST message of the history
+        # This keeps the turn structure (user -> model -> user) perfect.
+        first_content = decision_messages[0]["content"]
+        # Prepend the prompt to the existing text
+        for item in first_content:
+            if item["type"] == "text":
+                item["text"] = f"{DECISION_PROMPT}\n\nPREVIOUS CONTEXT:\n{item['text']}"
+                break
+
+        # 3. Append the new query as the final user turn      
+        decision_messages.append({"role": "user", "content": [{"type": "text", "text": f"USER REQUEST: {user_query}"}]})
 
     # This turns our list into the high-performance Gemma 4 string
     decision_prompt = processor.apply_chat_template(decision_messages, add_generation_prompt=True)
@@ -214,15 +239,24 @@ def alfred_brain(user_query, cap):
         
     else:
         # 3. CONTINUE PHASE: Answer from memory
-        STATUS = "THINKING"
         # We add the query to history. It will use the images from the previous turn!
         CHAT_HISTORY.append({"role": "user", "content": [{"type": "text", "text": user_query}]})
 
     # --- 4. FINAL RESPONSE GENERATION ---
+    STATUS = "THINKING"
 
-    # Create a temporary context that includes the instructions for the reasoning phase
-    reasoning_context = [{"role": "user", "content": [{"type": "text", "text": SYSTEM_PROMPT}]}]
-    reasoning_context.extend(CHAT_HISTORY)
+    # 1. Create a temporary deep copy of the history
+    reasoning_context = copy.deepcopy(CHAT_HISTORY)
+
+    # 2. Inject the ANSWERING_PROMPT into the VERY FIRST message of the history
+    # This ensures the turn structure remains: User -> Model -> User -> Model
+    if reasoning_context:
+        first_msg_content = reasoning_context[0]["content"]
+        for item in first_msg_content:
+            if item["type"] == "text":
+                # Prepend the rules to the existing text context
+                item["text"] = f"{ANSWERING_PROMPT}\n\nCONTEXT:\n{item['text']}"
+                break
 
     final_prompt = processor.apply_chat_template(reasoning_context, add_generation_prompt=True)
     if not final_prompt.endswith("<|thought|>\n"): 
