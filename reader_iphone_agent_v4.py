@@ -116,12 +116,11 @@ def speak(text):
 def extract_clean_answer(full_text):
     """
     Extracts only the final answer after the AI's thought process.
-    Supports all variations of Gemma 4 thought-end tags.
+    Supports all variations of Gemma 4 thought-end tags and hallucinated ReAct tags.
     """
-    # Known markers where the 'thinking' ends
-    markers = ["<channel|>", "</|thought|>", "<|end_thought|>"]
+    # 1. Expand markers to catch Gemma 4's varied end-of-thought tokens
+    markers = ["<channel|>", "</|thought|>", "<|end_thought|>", "<response>", "</thought>", "Assistant:", "Alfred:"]
     
-    # Find the last occurrence of any of these markers
     last_idx = -1
     marker_len = 0
     
@@ -138,8 +137,16 @@ def extract_clean_answer(full_text):
         # Fallback if the model didn't use a tag properly
         ans = full_text.strip()
         
-    # Remove internal decision tags so they don't go into history
-    ans = ans.replace("[CONTINUE]", "").replace("[CAMERA]", "").strip()
+    # 2. Aggressive Regex Cleanup
+    # This removes any lingering XML-style tags (<thought>, <action>, etc.)
+    # and any bracketed tags ([CONTINUE], [CAMERA]) in one pass.
+    ans = re.sub(r'<.*?>', '', ans)  # Removes everything between <>
+    ans = re.sub(r'\[.*?\]', '', ans)  # Removes everything between []
+    
+    # 3. Final Polish
+    # Remove lingering pipes (|) and extra whitespace
+    ans = ans.replace('|', '').strip()
+    
     return ans
 
 
