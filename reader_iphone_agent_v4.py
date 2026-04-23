@@ -113,6 +113,35 @@ def speak(text):
         subprocess.run(["say", "-v", "Siri", clean])
     threading.Thread(target=run).start()
 
+def extract_clean_answer(full_text):
+    """
+    Extracts only the final answer after the AI's thought process.
+    Supports all variations of Gemma 4 thought-end tags.
+    """
+    # Known markers where the 'thinking' ends
+    markers = ["<channel|>", "</|thought|>", "<|end_thought|>"]
+    
+    # Find the last occurrence of any of these markers
+    last_idx = -1
+    marker_len = 0
+    
+    for marker in markers:
+        idx = full_text.rfind(marker)
+        if idx > last_idx:
+            last_idx = idx
+            marker_len = len(marker)
+            
+    if last_idx != -1:
+        # Cut the text right after the marker
+        ans = full_text[last_idx + marker_len:].strip()
+    else:
+        # Fallback if the model didn't use a tag properly
+        ans = full_text.strip()
+        
+    # Remove internal decision tags so they don't go into history
+    ans = ans.replace("[CONTINUE]", "").replace("[CAMERA]", "").strip()
+    return ans
+
 
 def alfred_brain(user_query, cap):
     global CHAT_HISTORY, STATUS, CURRENT_IMAGES
@@ -201,19 +230,12 @@ def alfred_brain(user_query, cap):
     result = generate(model, processor, final_prompt, final_images, verbose=True, temp=0.1, max_tokens=800)
     
     # --- 5. PARSE, SPEAK, AND RECORD ---
-    # Extract just the answer
-    full_text = result.text
-    if "<channel|>" in full_text:
-        ans = full_text.split("<channel|>")[-1].strip()
-    elif "</|thought|>" in full_text:
-        ans = full_text.split("</|thought|>")[-1].strip()
-    else:
-        ans = full_text.strip()
+    # Use our helper function to extract only the clean answer
+    # This strips away the <|thought|> tags, the <channel|> tags, and the technical [CAMERA]/[CONTINUE] tags.
+    clean_ans = extract_clean_answer(result.text)
 
-    # Clean the answer for Siri
-    clean_ans = ans.replace("[CONTINUE]", "").replace("[CAMERA]", "").strip()
-    
-    # Add to history so Alfred remembers what he said
+    # Update history with ONLY the clean assistant response
+    # This prevents the model from seeing its previous "Thinking" on the next turn.
     CHAT_HISTORY.append({"role": "assistant", "content": [{"type": "text", "text": clean_ans}]})
     
     print(f"\n📢 ALFRED: {clean_ans}")
