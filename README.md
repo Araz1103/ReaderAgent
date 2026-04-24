@@ -38,7 +38,7 @@ To prevent macOS **"Trace Trap" crashes** (where background threads are forbidde
 *   **`alfred_text.py`**: The manual-trigger version. Uses Spacebar to initiate queries; ideal for quiet environments.
 *   **`test_devices`**: Contains `test_camera.py` and `test_ears.py`, diagnostic utilities to verify which cameras are available & microphone permissions, SoX resampling, and Whisper transcription speed.
 *   **`captures/`**: Internal buffer for the 3-shot burst images and temporary audio files.
-*   **`Architecture_Diagram.png/`**: High level overview of how the Agent functions.
+*   **`Architecture_Diagram.png`**: High level overview of how the Agent functions.
 
 ---
 
