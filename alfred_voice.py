@@ -88,6 +88,7 @@ def capture_burst_tool(cap):
     The 'Eye' of Alfred. 
     Provides a 10s alignment window, then 3 shots with 5s gaps.
     """
+    print("📸 Starting burst capture. Please align your book in the viewfinder.")
     global STATUS
     image_paths = []
     
@@ -280,6 +281,7 @@ def alfred_brain(user_query, cap):
     decision_text = decision_result.text.strip()
     
     print(f"🤖 Decision: {decision_text}")
+    print("-" * 50)
 
     # --- 2. EXECUTION PHASE ---
     if "[CAMERA]" in decision_text:
@@ -340,7 +342,8 @@ def alfred_brain(user_query, cap):
 
     # Optional: Debug line to verify images are being sent
     print(f"DEBUG: Passing {len(final_images)} images to Vision Encoder")
-
+    print("-" * 50)
+    print("🧠 Generating response for the user query...")
     result = generate(model,
                       processor,
                       final_prompt, 
@@ -361,6 +364,8 @@ def alfred_brain(user_query, cap):
     CHAT_HISTORY.append({"role": "assistant", "content": [{"type": "text", "text": clean_ans}]})
     
     print(f"\n📢 ALFRED: {clean_ans}")
+    print("-" * 50)
+    print("\n--- Alfred is Ambient. ---")
     speak(clean_ans)
     STATUS = "IDLE"
 
