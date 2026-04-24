@@ -52,6 +52,60 @@ To maintain a strict `User -> Assistant -> User` turn structure required by MLX 
 
 ---
 
+### 📜 The Engineering Journey: From Smart Glasses to Alfred
+
+#### 🌟 The Vision: "Frictionless Reading"
+The original inspiration for this project was a pair of **AI Smart Glasses**. Imagine reading a dense novel or a technical manual: you encounter a word like *"ephemeral"* or a concept like *"The Rosetta Stone."* Normally, you’d have to break your immersion, reach for a phone, and search for context.
+
+I wanted to solve this by building a hands-free, voice-activated assistant that "sees" what the reader sees. To validate this vision, I decided to use my **MacBook Air M4** as a simulation environment. With its high-end compute, built-in microphone, and speakers—combined with the iPhone as a high-res camera—it provided the perfect "lab" to build the brain of what will eventually live in a pair of glasses.
+
+---
+
+#### 🛠 Chapter 1: The Optical Hurdle & The "Burst" Innovation
+*   **The Problem:** I started with the Mac's built-in webcam, but it had a fixed focus. Book text was a blurry mess, and single frames often came back pitch black due to slow auto-exposure. Alfred was essentially "blind."
+*   **The Pivot:** I integrated the **iPhone Continuity Camera**.
+*   **The Solution:** Even with better hardware, one shot wasn't enough. I architected a **3-Shot Burst Tool**. By guiding the user through a 10s alignment window and three staggered shots, Alfred could "cross-reference" the text, achieving nearly 100% OCR accuracy.
+
+#### 🧠 Chapter 2: The Memory Crisis (Visual Working Memory)
+*   **The Requirement:** To feel like a real assistant, Alfred had to remember the page. If I asked a follow-up question, he shouldn't need a new photo.
+*   **The Hurdle:** This led to constant **`StopIteration` crashes**. I discovered that local multimodal models are extremely strict: the number of `<|image|>` tags in the conversation history **must** exactly match the images in RAM.
+*   **The Solution:** I engineered **Dynamic Context Sanitization**. Alfred now "scrubs" old image tags only when a new burst is triggered, allowing him to "re-scan" the same pixels across multiple conversational turns without crashing.
+
+#### 🎭 Chapter 3: The "Double-Think" & Dual-Brain Logic
+*   **The Problem:** Gemma 4 suffered an "Identity Crisis." It would repeat my prompts or leak its internal "Thinking" monologue into the spoken response.
+*   **The Pivot:** I decoupled Alfred into a **Dual-Brain Architecture**:
+    1.  **The Dispatcher:** A switcher that only decides: "Do I need the camera or can I answer from memory?"
+    2.  **The Researcher:** A focused persona that only explains the text.
+*   **The Innovation:** I implemented **In-Place Context Injection**. By merging instructions into the *beginning* of the first history turn, I maintained the strict `User -> Model` structure required by the M4 hardware while anchoring Alfred’s identity.
+
+#### ✍️ Chapter 4: Linguistic Physics (Advanced Prompt Engineering)
+*   **The Problem:** Even with the Dual-Brain setup, the 4B model was inconsistent. It would often skip the `<channel|>` separator or hallucinate "ReAct" tags like `<observation>`, making the output messy.
+*   **The Experiment:** I initially used specific storytelling examples, but the model started "mimicking" the vocabulary instead of reasoning.
+*   **The Breakthrough:** I pivoted to **Meta-Templates**. I provided a structural map using placeholders like `[Your internal analysis]` instead of specific words. This forced the model to fill in the logic itself while strictly adhering to the token rules.
+*   **The Result:** By defining a **Mandatory Transition** rule and using a **Surgical Cut Regex Parser**, I ensured that Siri only ever speaks the clean final answer, never the "mental sandbox" behind it.
+
+#### 🎙️ Chapter 4: The "Trace Trap" & The Ambient Ear
+*   **The Goal:** Make Alfred truly hands-free using **mlx-whisper** for a "Hey Alfred" wake-word.
+*   **The Crisis:** Moving the audio listener to a background thread caused an immediate **macOS `zsh: trace trap` crash**. I hit a hard OS limit: background threads are forbidden from updating UI/OpenCV windows on macOS.
+*   **The Final Fix:** The **Main-Thread Messenger Pattern**. I moved the "Ear" to a background thread to handle transcription and created a global `pending_query` flag. The Main Thread (the UI owner) now "picks up" the voice command and safely triggers the Brain.
+
+---
+
+#### ✅ The Result: A Living Prototype
+Alfred is now a perfectly stable, hands-free, visual-memory-capable agent. He manages hardware, handles high-concurrency threading, and performs high-level literary reasoning. This project proves that the "Smart Glasses" brain is not only possible but can run entirely **on-device, privately, and locally.**
+
+---
+
+### 🛠 Summary of Technical Milestones
+
+| Milestone | Technical Hurdle | Engineering Solution |
+| :--- | :--- | :--- |
+| **Vision** | Fixed-focus blur & Black frames | **3-Shot Burst + iPhone Continuity** |
+| **Memory** | Tag-Image Mismatch (`StopIteration`) | **Dynamic Image Tag Sanitization** |
+| **Stability** | User-User Turn Collisions | **In-Place Context Injection** |
+| **Precision** | Thought-Leaking & Hallucination | **Meta-Template Prompting + Regex Parser** |
+| **Concurrency** | macOS Trace Trap (UI Threading) | **Main-Thread Messenger Pattern** |
+
 ## ⚙️ Setup & Installation
 
 ### Prerequisites
