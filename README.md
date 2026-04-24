@@ -84,7 +84,7 @@ I wanted to solve this by building a hands-free, voice-activated assistant that 
 *   **The Breakthrough:** I pivoted to **Meta-Templates**. I provided a structural map using placeholders like `[Your internal analysis]` instead of specific words. This forced the model to fill in the logic itself while strictly adhering to the token rules.
 *   **The Result:** By defining a **Mandatory Transition** rule and using a **Surgical Cut Regex Parser**, I ensured that Siri only ever speaks the clean final answer, never the "mental sandbox" behind it.
 
-#### 🎙️ Chapter 4: The "Trace Trap" & The Ambient Ear
+#### 🎙️ Chapter 5: The "Trace Trap" & The Ambient Ear
 *   **The Goal:** Make Alfred truly hands-free using **mlx-whisper** for a "Hey Alfred" wake-word.
 *   **The Crisis:** Moving the audio listener to a background thread caused an immediate **macOS `zsh: trace trap` crash**. I hit a hard OS limit: background threads are forbidden from updating UI/OpenCV windows on macOS.
 *   **The Final Fix:** The **Main-Thread Messenger Pattern**. I moved the "Ear" to a background thread to handle transcription and created a global `pending_query` flag. The Main Thread (the UI owner) now "picks up" the voice command and safely triggers the Brain.
