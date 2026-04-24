@@ -292,13 +292,16 @@ def alfred_brain(user_query, cap):
         
         # CLEAR IMAGES FROM HISTORY: We want the model to only "see" the 3 NEW images.
         # We keep the TEXT of the history so it remembers the conversation.
-        for msg in CHAT_HISTORY:
-            if isinstance(msg["content"], list):
-                # We filter out the 'image' type items
-                msg["content"] = [c for c in msg["content"] if c["type"] != "image"]
-                # Ensure we don't have an empty content list
-                if not msg["content"]:
-                    msg["content"] = [{"type": "text", "text": "[Previous context]"}]
+        # for msg in CHAT_HISTORY:
+        #     if isinstance(msg["content"], list):
+        #         # We filter out the 'image' type items
+        #         msg["content"] = [c for c in msg["content"] if c["type"] != "image"]
+        #         # Ensure we don't have an empty content list
+        #         if not msg["content"]:
+        #             msg["content"] = [{"type": "text", "text": "[Previous context]"}]
+
+        # Reset the chat history, since we have moved on to a new page!
+        CHAT_HISTORY = []
 
         # TASK PROMPT: Specifically for image analysis
         task_prompt = (
