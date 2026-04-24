@@ -16,7 +16,7 @@ CAM_INDEX = 0  # 0 for iPhone, 1 for Mac
 STATUS = "IDLE"
 CURRENT_IMAGES = [] # Stores the active 3 PIL images
 CHAT_HISTORY = []   # Stores the multi-turn conversation
-global_cap = None # We will use this to share the camera between threads
+pending_query = None # The messenger variable to pass the query from Ears to Brain
 
 print("🚀 LOADING ALFRED'S BRAIN (Gemma 4 E4B)...")
 model, processor = load(MODEL_ID)
@@ -188,7 +188,7 @@ def extract_clean_answer(full_text):
 
 def listen_ambient_loop():
     """Background thread: Listens for 'Alfred' in 2.5s intervals."""
-    global STATUS, global_cap
+    global STATUS
     ambient_file = "captures/ambient.wav"
     
     while True:
@@ -211,7 +211,7 @@ def listen_ambient_loop():
 
 def trigger_voice_interaction():
     """Wakes Alfred up and captures the user's actual question."""
-    global STATUS, global_cap
+    global STATUS, pending_query
     
     # 1. Provide feedback (Sync ensures he doesn't hear himself)
     STATUS = "LISTENING"
@@ -230,8 +230,8 @@ def trigger_voice_interaction():
     
     if len(query) > 3:
         print(f"🗣️ User asked: {query}")
-        # Run the existing brain logic
-        alfred_brain(query, global_cap)
+        # HANDOFF: Set the global variable. The Main Thread will see this.
+        pending_query = query
     else:
         speak("I didn't quite catch that.", sync=True)
         STATUS = "IDLE"
@@ -366,12 +366,12 @@ def alfred_brain(user_query, cap):
 
 # --- 5. INTERACTION LOOP ---
 def main():
-    global STATUS, global_cap
+    global STATUS, pending_query
     if not os.path.exists("captures"): os.makedirs("captures")
     
-    global_cap = cv2.VideoCapture(CAM_INDEX)
-    global_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-    global_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+    cap = cv2.VideoCapture(CAM_INDEX)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
     # START THE EARS: This thread runs forever in the background
     threading.Thread(target=listen_ambient_loop, daemon=True).start()
@@ -379,7 +379,15 @@ def main():
     print("\n--- Alfred is Ambient. ---")
     
     while True:
-        ret, frame = global_cap.read()
+
+        if pending_query:
+            query_to_process = pending_query
+            pending_query = None # Clear the messenger immediately
+            
+            # Since we are on the Main Thread, this call is now SAFE!
+            alfred_brain(query_to_process, cap)
+
+        ret, frame = cap.read()
         if not ret: break
 
         # Always show the HUD
@@ -392,7 +400,7 @@ def main():
         if key == ord('q'):
             break
 
-    global_cap.release()
+    cap.release()
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
