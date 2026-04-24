@@ -54,17 +54,27 @@ Alfred: [CAMERA] I need to see the last paragraph. Please take a picture of what
 """
 
 # ANSWERING PROMPT (used in the reasoning phase, after decision and tool use)
-ANSWERING_PROMPT = """You are Alfred, a Contextual Reading Assistant. 
+ANSWERING_PROMPT = """You are Alfred, a helpful Contextual Reading Assistant.
 
 The user is reading a book, and they will ask you to explain words or concepts they encounter. 
-You have to answer their queries based on the book they are reading.
+You have to answer their queries using your knowledge of language & literature, based on the book they are reading.
 
-Always prefer to explain words and concepts user asks about contextually, from the book, using the images you have.
+Prefer to explain words and concepts user asks about contextually, from the book, using the images you have.
+Combine your knowledge of language & literature, to help answer the user's query, and help them understand what they are reading.
+But you can also use your general knowledge of language and literature to help answer the user's query, to help them understand what they are reading.
 
 RULES:
-1. Use the images to find the exact sentences for context.
-2. Be concise and helpful. Use your knowledge of language and literature to explain, but always try to ground your answers in the text you see in the images.
+1. You can use the images to find the exact sentences for context.
+2. Be concise and helpful. Use your knowledge of language and literature to explain, and try to ground your answers in the text you see in the images.
+So explain what the word or concept means in general and then explain what it means in the context of the book.
 3. Do not mention technical tags or tools. Provide the explanation directly without narrating your internal process.
+4. In case the user asks about a word or concept that is not in the images you have, you can mention you could not find it in the images of what they are reading, 
+and use your general knowledge to explain it as best as you can.
+5. MANDATORY TRANSITION: Use your internal thought process for analysis, but you MUST always conclude it with the <channel|> token before providing your final response to the user.
+
+FORMAT TEMPLATE:
+User: [User Query]
+Assistant: <|thought|> [Your internal analysis of what the word or concept means, the book text, literary context, and word location] <channel|> [Your clean, concise final explanation for the user]
 """
 
 # --- 3. THE VISION TOOL ---
@@ -229,7 +239,7 @@ def alfred_brain(user_query, cap):
         task_prompt = (
             "I am providing 3 images of the same book page. Use them to ensure you see all the text clearly. "
             f"Find the word or concept based on user query: '{user_query}'. "
-            "Look at the images and explain the meaning contextually. Be concise."
+            "Look at the images and try to explain the meaning contextually, leveraging your knowledge of language & literature. Be concise."
         )
         
         # New turn with 3 image tags
@@ -268,7 +278,15 @@ def alfred_brain(user_query, cap):
     # Optional: Debug line to verify images are being sent
     print(f"DEBUG: Passing {len(final_images)} images to Vision Encoder")
 
-    result = generate(model, processor, final_prompt, final_images, verbose=True, temp=0.1, max_tokens=800)
+    result = generate(model,
+                      processor,
+                      final_prompt, 
+                      final_images, 
+                      verbose=True,
+                      temp=0.1,
+                      max_tokens=800, 
+                      stop_strings=["<turn|>", "<|turn|>"] # Safety: stops model from runaway chatting
+                      )
     
     # --- 5. PARSE, SPEAK, AND RECORD ---
     # Use our helper function to extract only the clean answer
